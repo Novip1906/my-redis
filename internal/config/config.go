@@ -21,7 +21,7 @@ func LoadConfig() (*Config, error) {
 
 	var cfg Config
 	if err := cleanenv.ReadConfig(path, &cfg); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return &cfg
+	return &cfg, nil
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/Novip1906/my-redis/internal/config"
 	"github.com/Novip1906/my-redis/internal/network"
-	"github.com/Novip1906/my-redis/internal/storage"
 )
 
 type App struct {
@@ -13,10 +12,8 @@ type App struct {
 	log    *slog.Logger
 }
 
-func NewApp(log *slog.Logger, cfg *config.Config) (*App, error) {
-	memoryStorage := storage.NewStorage()
-
-	server := network.NewTCPServer(cfg.Address, memoryStorage, log)
+func NewApp(log *slog.Logger, cfg *config.Config, storage network.Storage) (*App, error) {
+	server := network.NewTCPServer(cfg.Address, storage, log)
 
 	return &App{
 		server: server,
@@ -26,4 +23,8 @@ func NewApp(log *slog.Logger, cfg *config.Config) (*App, error) {
 
 func (a *App) Run() error {
 	return a.server.Start()
+}
+
+func (a *App) Stop() {
+	a.server.Stop()
 }

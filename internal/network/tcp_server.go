@@ -2,10 +2,12 @@ package network
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 )
 
 type Storage interface {
@@ -15,9 +17,11 @@ type Storage interface {
 }
 
 type TCPServer struct {
-	port    string
-	storage Storage
-	log     *slog.Logger
+	wg       sync.WaitGroup
+	port     string
+	storage  Storage
+	log      *slog.Logger
+	listener net.Listener
 }
 
 func NewTCPServer(port string, storage Storage, log *slog.Logger) *TCPServer {
@@ -33,18 +37,29 @@ func (s *TCPServer) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %w", err)
 	}
-	defer listener.Close()
+	s.listener = listener
 
 	s.log.Info("TCP Server started", "port", s.port)
 
 	for {
-		conn, err := listener.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				s.log.Info("Server stopped accepting new connections")
+				return nil
+			}
 			s.log.Error("Connection error", "error", err)
 			continue
 		}
+
+		s.wg.Add(1)
 		go s.handleConnection(conn)
 	}
+}
+
+func (s *TCPServer) Stop() {
+	s.listener.Close()
+	s.wg.Wait()
 }
 
 func (s *TCPServer) handleConnection(conn net.Conn) {
@@ -107,4 +122,6 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 	}
 
 	slog.Info("Connection closed", "client", remoteAddr)
+
+	s.wg.Done()
 }

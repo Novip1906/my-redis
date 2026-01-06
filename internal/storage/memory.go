@@ -4,31 +4,31 @@ import (
 	"sync"
 )
 
-type Store struct {
+type MemoryStorage struct {
 	mu   sync.RWMutex
 	data map[string]string
 }
 
-func NewStorage() *Store {
-	return &Store{
+func NewMemoryStorage() *MemoryStorage {
+	return &MemoryStorage{
 		data: make(map[string]string),
 	}
 }
 
-func (s *Store) Set(key, value string) {
+func (s *MemoryStorage) Set(key, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data[key] = value
 }
 
-func (s *Store) Get(key string) (string, bool) {
+func (s *MemoryStorage) Get(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	val, ok := s.data[key]
 	return val, ok
 }
 
-func (s *Store) Delete(key string) {
+func (s *MemoryStorage) Delete(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.data, key)
