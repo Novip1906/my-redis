@@ -20,8 +20,15 @@ func LoadConfig() (*Config, error) {
 	}
 
 	var cfg Config
-	if err := cleanenv.ReadConfig(path, &cfg); err != nil {
-		return nil, err
+	if _, err := os.Stat(path); err == nil {
+		if err := cleanenv.ReadConfig(path, &cfg); err != nil {
+			return nil, err
+		}
+	} else {
+		// Если файла нет, читаем только из ENV
+		if err := cleanenv.ReadEnv(&cfg); err != nil {
+			return nil, err
+		}
 	}
 	return &cfg, nil
 }
