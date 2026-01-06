@@ -11,12 +11,12 @@ type Config struct {
 	Address string `yaml:"address" env-default:":6379"`
 }
 
-func MustLoadConfig() *Config {
+func LoadConfig() (*Config, error) {
 	godotenv.Load()
 
 	path := os.Getenv("CONFIG_PATH")
 	if path == "" {
-		panic("No config path in env")
+		path = "./configs/config.yaml"
 	}
 
 	var cfg Config

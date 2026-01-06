@@ -7,8 +7,13 @@ import (
 )
 
 func main() {
-	cfg := config.MustLoadConfig()
 	log := logging.SetupLogger()
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Error("Config load error", "error", err)
+		return
+	}
 
 	app, err := app.NewApp(log, cfg)
 	if err != nil {
