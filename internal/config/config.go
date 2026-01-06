@@ -25,7 +25,6 @@ func LoadConfig() (*Config, error) {
 			return nil, err
 		}
 	} else {
-		// Если файла нет, читаем только из ENV
 		if err := cleanenv.ReadEnv(&cfg); err != nil {
 			return nil, err
 		}
