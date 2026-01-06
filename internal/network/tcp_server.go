@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Storage interface {
@@ -63,14 +64,19 @@ func (s *TCPServer) Stop() {
 }
 
 func (s *TCPServer) handleConnection(conn net.Conn) {
+	defer s.wg.Done()
 	defer conn.Close()
 
 	remoteAddr := conn.RemoteAddr().String()
-	s.log.Info("New connection", "client", remoteAddr)
+
+	log := s.log.With("client", remoteAddr)
+	log.Info("New connection")
 
 	scanner := bufio.NewScanner(conn)
 
 	for scanner.Scan() {
+		conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+
 		commandLine := scanner.Text()
 		parts := strings.Fields(commandLine)
 
@@ -112,6 +118,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 				response = "OK\n"
 			}
 		case "QUIT":
+			log.Info("Client QUIT")
 			conn.Write([]byte("Bye!\n"))
 			return
 		default:
@@ -121,7 +128,5 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		conn.Write([]byte(response))
 	}
 
-	slog.Info("Connection closed", "client", remoteAddr)
-
-	s.wg.Done()
+	log.Info("Connection closed")
 }
