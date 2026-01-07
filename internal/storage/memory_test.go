@@ -69,6 +69,11 @@ func TestMemoryStorage_TTL(t *testing.T) {
 
 	time.Sleep(1100 * time.Millisecond)
 
+	_, ok := s.Get("key")
+	if ok {
+		t.Error("GET() ok = true, want false")
+	}
+
 	seconds = s.TTL("key")
 	if seconds != -2 {
 		t.Errorf("TTL() seconds = %v, want -2", seconds)

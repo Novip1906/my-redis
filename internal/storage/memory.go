@@ -35,8 +35,17 @@ func (s *MemoryStorage) Set(key, value string) {
 func (s *MemoryStorage) Get(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	val, ok := s.data[key]
-	return val.Value, ok
+	item, ok := s.data[key]
+	if !ok {
+		return "", false
+	}
+
+	if item.ExpiresAt > 0 && time.Now().Unix() >= item.ExpiresAt {
+		delete(s.data, key)
+		return "", false
+	}
+
+	return item.Value, ok
 }
 
 func (s *MemoryStorage) Delete(key string) {
