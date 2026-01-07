@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"fmt"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -52,7 +54,7 @@ func (s *MemoryStorage) Expire(key string, seconds int64) bool {
 		return false
 	}
 
-	if item.ExpiresAt > 0 && time.Now().Unix() > item.ExpiresAt {
+	if item.ExpiresAt > 0 && time.Now().Unix() >= item.ExpiresAt {
 		delete(s.data, key)
 		return false
 	}
@@ -82,4 +84,28 @@ func (s *MemoryStorage) TTL(key string) int64 {
 	}
 
 	return item.ExpiresAt - now
+}
+
+func (s *MemoryStorage) Increment(key string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.data[key]
+	if !ok || item.ExpiresAt > 0 && time.Now().Unix() >= item.ExpiresAt {
+		s.data[key] = Item{
+			Value:     "1",
+			ExpiresAt: -1,
+		}
+		return 1, nil
+	}
+
+	value, err := strconv.ParseInt(item.Value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("value is not an integer or out of range")
+	}
+
+	item.Value = strconv.FormatInt(value, 10)
+	s.data[key] = item
+
+	return int64(value + 1), nil
 }

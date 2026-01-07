@@ -75,6 +75,33 @@ func TestMemoryStorage_TTL(t *testing.T) {
 	}
 }
 
+func TestMemoryStorage_Increment(t *testing.T) {
+	s := NewMemoryStorage()
+
+	s.Set("one", "1")
+	res, err := s.Increment("one")
+	if err != nil {
+		t.Error("Increment error", "error", err)
+	}
+	if res != 2 {
+		t.Errorf("res = %v, want 2", res)
+	}
+
+	res, err = s.Increment("zero")
+	if err != nil {
+		t.Error("Increment error", "error", err)
+	}
+	if res != 1 {
+		t.Errorf("res = %v, want 1", res)
+	}
+
+	s.Set("str", "string")
+	_, err = s.Increment("str")
+	if err == nil {
+		t.Error("err is null, expected parse error")
+	}
+}
+
 func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 	s := NewMemoryStorage()
 	var wg sync.WaitGroup
