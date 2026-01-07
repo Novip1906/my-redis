@@ -40,6 +40,11 @@ func TestTCPServer_Integration(t *testing.T) {
 		{"GET unknown\n", "(nil)"},
 		{"DEL mykey\n", "OK"},
 		{"GET mykey\n", "(nil)"},
+		{"SET with ttl\n", "OK"},
+		{"EXPIRE with 2\n", "1"},
+		{"TTL with\n", "2"},
+		{"SET without ttl\n", "OK"},
+		{"TTL without\n", "-1"},
 	}
 
 	reader := bufio.NewReader(conn)

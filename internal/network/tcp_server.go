@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,8 @@ type Storage interface {
 	Set(key, value string)
 	Get(key string) (string, bool)
 	Delete(key string)
+	Expire(key string, seconds int64) bool
+	TTL(key string) int64
 }
 
 type TCPServer struct {
@@ -91,36 +94,67 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		case "SET":
 			if len(parts) < 3 {
 				response = "(error) ERR wrong number of arguments for 'set'\n"
-			} else {
-				key := parts[1]
-				val := strings.Join(parts[2:], " ")
-				s.storage.Set(key, val)
-				response = "OK\n"
+				break
 			}
+			key := parts[1]
+			val := strings.Join(parts[2:], " ")
+			s.storage.Set(key, val)
+			response = "OK\n"
+
 		case "GET":
 			if len(parts) != 2 {
 				response = "(error) ERR wrong number of arguments for 'get'\n"
-			} else {
-				key := parts[1]
-				val, ok := s.storage.Get(key)
-				if !ok {
-					response = "(nil)\n"
-				} else {
-					response = val + "\n"
-				}
+				break
 			}
+			key := parts[1]
+			val, ok := s.storage.Get(key)
+			if !ok {
+				response = "(nil)\n"
+			} else {
+				response = val + "\n"
+			}
+
 		case "DEL":
 			if len(parts) != 2 {
 				response = "(error) ERR wrong number of arguments for 'del'\n"
-			} else {
-				key := parts[1]
-				s.storage.Delete(key)
-				response = "OK\n"
+				break
 			}
+			key := parts[1]
+			s.storage.Delete(key)
+			response = "OK\n"
+
+		case "EXPIRE":
+			if len(parts) != 3 {
+				response = "(error) ERR wrong number of arguments for 'expire'\n"
+				break
+			}
+			key := parts[1]
+			seconds, err := strconv.Atoi(parts[2])
+			if err != nil {
+				response = "(error) ERR value is not an integer or out of range\n"
+			}
+
+			ok := s.storage.Expire(key, int64(seconds))
+			if ok {
+				response = "1\n"
+			} else {
+				response = "0\n"
+			}
+
+		case "TTL":
+			if len(parts) != 2 {
+				response = "(error) ERR wrong number of arguments for 'ttl'\n"
+				break
+			}
+			key := parts[1]
+			ttl := s.storage.TTL(key)
+			response = fmt.Sprintf("%d\n", ttl)
+
 		case "QUIT":
 			log.Info("Client QUIT")
 			conn.Write([]byte("Bye!\n"))
 			return
+
 		default:
 			response = fmt.Sprintf("(error) ERR unknown command '%s'\n", cmd)
 		}
