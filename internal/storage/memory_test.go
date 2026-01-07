@@ -3,6 +3,7 @@ package storage
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestMemoryStorage_SetGet(t *testing.T) {
@@ -46,6 +47,31 @@ func TestMemoryStorage_Delete(t *testing.T) {
 	_, ok := s.Get("key")
 	if ok {
 		t.Error("Expected key to be deleted, but it was found")
+	}
+}
+
+func TestMemoryStorage_TTL(t *testing.T) {
+	s := NewMemoryStorage()
+
+	s.Set("key", "val")
+	s.Set("without", "ttl")
+	s.Expire("key", 1)
+
+	seconds := s.TTL("key")
+	if seconds <= 0 {
+		t.Errorf("TTL() seconds = %v, want >0", seconds)
+	}
+
+	seconds = s.TTL("without")
+	if seconds != -1 {
+		t.Errorf("TTL() seconds = %v, want -1", seconds)
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+
+	seconds = s.TTL("key")
+	if seconds != -2 {
+		t.Errorf("TTL() seconds = %v, want -2", seconds)
 	}
 }
 

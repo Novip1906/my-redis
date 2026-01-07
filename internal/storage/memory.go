@@ -2,34 +2,84 @@ package storage
 
 import (
 	"sync"
+	"time"
 )
+
+type Item struct {
+	Value     string
+	ExpiresAt int64
+}
 
 type MemoryStorage struct {
 	mu   sync.RWMutex
-	data map[string]string
+	data map[string]Item
 }
 
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
-		data: make(map[string]string),
+		data: make(map[string]Item),
 	}
 }
 
 func (s *MemoryStorage) Set(key, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.data[key] = value
+	s.data[key] = Item{
+		Value:     value,
+		ExpiresAt: -1,
+	}
 }
 
 func (s *MemoryStorage) Get(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	val, ok := s.data[key]
-	return val, ok
+	return val.Value, ok
 }
 
 func (s *MemoryStorage) Delete(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.data, key)
+}
+
+func (s *MemoryStorage) Expire(key string, seconds int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.data[key]
+	if !ok {
+		return false
+	}
+
+	if item.ExpiresAt > 0 && time.Now().Unix() > item.ExpiresAt {
+		delete(s.data, key)
+		return false
+	}
+
+	item.ExpiresAt = time.Now().Add(time.Duration(seconds) * time.Second).Unix()
+	s.data[key] = item
+	return true
+}
+func (s *MemoryStorage) TTL(key string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item, ok := s.data[key]
+	if !ok {
+		return -2
+	}
+
+	if item.ExpiresAt == -1 {
+		return -1
+	}
+
+	now := time.Now().Unix()
+
+	if now >= item.ExpiresAt {
+		delete(s.data, key)
+		return -2
+	}
+
+	return item.ExpiresAt - now
 }
