@@ -35,22 +35,25 @@ func TestTCPServer_Integration(t *testing.T) {
 		command  string
 		expected string
 	}{
-		{"SET mykey myvalue\n", "OK"},
-		{"GET mykey\n", "myvalue"},
-		{"GET unknown\n", "(nil)"},
-		{"DEL mykey\n", "OK"},
-		{"GET mykey\n", "(nil)"},
-		{"SET with ttl\n", "OK"},
-		{"EXPIRE with 2\n", "1"},
-		{"TTL with\n", "2"},
-		{"SET without ttl\n", "OK"},
-		{"TTL without\n", "-1"},
+		{"SET mykey myvalue", "OK"},
+		{"GET mykey", "myvalue"},
+		{"GET unknown", "(nil)"},
+		{"DEL mykey", "OK"},
+		{"GET mykey", "(nil)"},
+		{"SET with ttl", "OK"},
+		{"EXPIRE with 2", "1"},
+		{"TTL with", "2"},
+		{"SET without ttl", "OK"},
+		{"TTL without", "-1"},
+		{"INCR testIncr", "1"},
+		{"SET testIncr 2", "OK"},
+		{"INCR testIncr", "3"},
 	}
 
 	reader := bufio.NewReader(conn)
 
 	for _, tt := range tests {
-		fmt.Fprint(conn, tt.command)
+		fmt.Fprint(conn, tt.command+"\n")
 
 		response, err := reader.ReadString('\n')
 		if err != nil {

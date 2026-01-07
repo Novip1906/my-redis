@@ -18,6 +18,7 @@ type Storage interface {
 	Delete(key string)
 	Expire(key string, seconds int64) bool
 	TTL(key string) int64
+	Increment(key string) (int64, error)
 }
 
 type TCPServer struct {
@@ -147,8 +148,21 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 				break
 			}
 			key := parts[1]
-			ttl := s.storage.TTL(key)
-			response = fmt.Sprintf("%d\n", ttl)
+			seconds := s.storage.TTL(key)
+			response = fmt.Sprintf("%d\n", seconds)
+
+		case "INCR":
+			if len(parts) != 2 {
+				response = "(error) ERR wrong number of arguments for 'incr'\n"
+				break
+			}
+			key := parts[1]
+			val, err := s.storage.Increment(key)
+			if err != nil {
+				response = "(error) ERR value is not an integer or out of range\n"
+				break
+			}
+			response = fmt.Sprintf("%d\n", val)
 
 		case "QUIT":
 			log.Info("Client QUIT")
