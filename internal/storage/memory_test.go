@@ -107,6 +107,19 @@ func TestMemoryStorage_Increment(t *testing.T) {
 	}
 }
 
+func TestMemoryStorage_Flush(t *testing.T) {
+	s := NewMemoryStorage()
+
+	s.Set("key", "value")
+
+	s.Flush()
+
+	_, ok := s.Get("key")
+	if ok {
+		t.Error("DB is not empty afret FLUSH command")
+	}
+}
+
 func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 	s := NewMemoryStorage()
 	var wg sync.WaitGroup

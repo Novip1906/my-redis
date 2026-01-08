@@ -48,6 +48,7 @@ func TestTCPServer_Integration(t *testing.T) {
 		{"INCR testIncr", "1"},
 		{"SET testIncr 2", "OK"},
 		{"INCR testIncr", "3"},
+		{"FLUSH", "OK"},
 	}
 
 	reader := bufio.NewReader(conn)

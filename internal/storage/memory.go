@@ -118,3 +118,10 @@ func (s *MemoryStorage) Increment(key string) (int64, error) {
 
 	return int64(value + 1), nil
 }
+
+func (s *MemoryStorage) Flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.data = make(map[string]Item)
+}

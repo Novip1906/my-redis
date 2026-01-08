@@ -19,6 +19,7 @@ type Storage interface {
 	SetTTL(key string, seconds int64) bool
 	GetTTL(key string) int64
 	Increment(key string) (int64, error)
+	Flush()
 }
 
 type TCPServer struct {
@@ -163,6 +164,10 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 				break
 			}
 			response = fmt.Sprintf("%d\n", val)
+
+		case "FLUSH":
+			s.storage.Flush()
+			response = "OK\n"
 
 		case "QUIT":
 			log.Info("Client QUIT")
