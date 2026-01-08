@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,10 +19,14 @@ func TestTCPServer_Integration(t *testing.T) {
 
 	parser := compute.NewParser(storage)
 
-	aof, err := aof.NewAOF("database_test.aof")
+	tmpDir := t.TempDir()
+	aofPath := filepath.Join(tmpDir, "database_test.aof")
+
+	aof, err := aof.NewAOF(aofPath)
 	if err != nil {
 		t.Error("Failed to init AOF", "error", err)
 	}
+	defer aof.Close()
 
 	port := ":4000"
 	server := NewTCPServer(port, parser, aof, slog.Default())
@@ -31,6 +36,8 @@ func TestTCPServer_Integration(t *testing.T) {
 			t.Logf("Server stopped: %v", err)
 		}
 	}()
+
+	defer server.Stop()
 
 	time.Sleep(50 * time.Millisecond)
 
