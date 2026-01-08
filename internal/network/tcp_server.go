@@ -16,8 +16,8 @@ type Storage interface {
 	Set(key, value string)
 	Get(key string) (string, bool)
 	Delete(key string)
-	Expire(key string, seconds int64) bool
-	TTL(key string) int64
+	SetTTL(key string, seconds int64) bool
+	GetTTL(key string) int64
 	Increment(key string) (int64, error)
 }
 
@@ -135,7 +135,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 				response = "(error) ERR value is not an integer or out of range\n"
 			}
 
-			ok := s.storage.Expire(key, int64(seconds))
+			ok := s.storage.SetTTL(key, int64(seconds))
 			if ok {
 				response = "1\n"
 			} else {
@@ -148,7 +148,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 				break
 			}
 			key := parts[1]
-			seconds := s.storage.TTL(key)
+			seconds := s.storage.GetTTL(key)
 			response = fmt.Sprintf("%d\n", seconds)
 
 		case "INCR":

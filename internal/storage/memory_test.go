@@ -55,14 +55,14 @@ func TestMemoryStorage_TTL(t *testing.T) {
 
 	s.Set("key", "val")
 	s.Set("without", "ttl")
-	s.Expire("key", 1)
+	s.SetTTL("key", 1)
 
-	seconds := s.TTL("key")
+	seconds := s.GetTTL("key")
 	if seconds <= 0 {
 		t.Errorf("TTL() seconds = %v, want >0", seconds)
 	}
 
-	seconds = s.TTL("without")
+	seconds = s.GetTTL("without")
 	if seconds != -1 {
 		t.Errorf("TTL() seconds = %v, want -1", seconds)
 	}
@@ -74,7 +74,7 @@ func TestMemoryStorage_TTL(t *testing.T) {
 		t.Error("GET() ok = true, want false")
 	}
 
-	seconds = s.TTL("key")
+	seconds = s.GetTTL("key")
 	if seconds != -2 {
 		t.Errorf("TTL() seconds = %v, want -2", seconds)
 	}
