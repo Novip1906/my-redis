@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Novip1906/my-redis/internal/aof"
 	"github.com/Novip1906/my-redis/internal/compute"
 	"github.com/Novip1906/my-redis/internal/storage"
 )
@@ -17,8 +18,13 @@ func TestTCPServer_Integration(t *testing.T) {
 
 	parser := compute.NewParser(storage)
 
+	aof, err := aof.NewAOF("database_test.aof")
+	if err != nil {
+		t.Error("Failed to init AOF", "error", err)
+	}
+
 	port := ":4000"
-	server := NewTCPServer(port, parser, slog.Default())
+	server := NewTCPServer(port, parser, aof, slog.Default())
 
 	go func() {
 		if err := server.Start(); err != nil {

@@ -26,10 +26,10 @@ func NewParser(storage Storage) *Parser {
 	}
 }
 
-func (p *Parser) ProcessCommand(commandLine string) (response string) {
+func (p *Parser) ProcessCommand(commandLine string) (response string, saveToAOF bool) {
 	parts := strings.Fields(commandLine)
 	if len(parts) == 0 {
-		return ""
+		return "", false
 	}
 
 	cmd := strings.ToUpper(parts[0])
@@ -37,78 +37,78 @@ func (p *Parser) ProcessCommand(commandLine string) (response string) {
 	switch cmd {
 	case "SET":
 		if len(parts) < 3 {
-			return "(error) ERR wrong number of arguments for 'set'"
+			return "(error) ERR wrong number of arguments for 'set'", false
 		}
 		key := parts[1]
 		val := strings.Join(parts[2:], " ")
 		p.storage.Set(key, val)
-		return "OK"
+		return "OK", true
 
 	case "GET":
 		if len(parts) != 2 {
-			return "(error) ERR wrong number of arguments for 'get'"
+			return "(error) ERR wrong number of arguments for 'get'", false
 		}
 		key := parts[1]
 		val, ok := p.storage.Get(key)
 		if !ok {
-			return "(nil)"
+			return "(nil)", false
 		} else {
-			return val
+			return val, false
 		}
 
 	case "DEL":
 		if len(parts) != 2 {
-			return "(error) ERR wrong number of arguments for 'del'"
+			return "(error) ERR wrong number of arguments for 'del'", false
 		}
 		key := parts[1]
 		p.storage.Delete(key)
-		return "OK"
+		return "OK", true
 
 	case "EXPIRE":
 		if len(parts) != 3 {
-			return "(error) ERR wrong number of arguments for 'expire'"
+			return "(error) ERR wrong number of arguments for 'expire'", false
 		}
 		key := parts[1]
 		seconds, err := strconv.Atoi(parts[2])
 		if err != nil {
-			return "(error) ERR value is not an integer or out of range"
+			return "(error) ERR value is not an integer or out of range", false
 		}
 
 		ok := p.storage.SetTTL(key, int64(seconds))
 		if ok {
-			return "1"
+			return "1", true
 		} else {
-			return "0"
+			return "0", false
 		}
 
 	case "TTL":
 		if len(parts) != 2 {
-			return "(error) ERR wrong number of arguments for 'ttl'"
+			return "(error) ERR wrong number of arguments for 'ttl'", false
 		}
 		key := parts[1]
 		seconds := p.storage.GetTTL(key)
-		return fmt.Sprintf("%d", seconds)
+		return fmt.Sprintf("%d", seconds), false
 
 	case "INCR":
 		if len(parts) != 2 {
-			return "(error) ERR wrong number of arguments for 'incr'"
+			return "(error) ERR wrong number of arguments for 'incr'", false
 		}
 		key := parts[1]
 		val, err := p.storage.Increment(key)
 		if err != nil {
-			return "(error) ERR value is not an integer or out of range"
+			return "(error) ERR value is not an integer or out of range", false
 		}
-		return fmt.Sprintf("%d", val)
+		return fmt.Sprintf("%d", val), true
 
 	case "FLUSH":
 		p.storage.Flush()
-		return "OK"
+		return "OK", true
 
 	case "QUIT":
-		return "Bye!"
+		return "Bye!", false
 
 	default:
-		return fmt.Sprintf("(error) ERR unknown command '%s'\n", cmd)
+		return fmt.Sprintf("(error) ERR unknown command '%s'\n", cmd), false
 	}
 
 }

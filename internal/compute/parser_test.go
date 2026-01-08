@@ -33,7 +33,7 @@ func TestParser(t *testing.T) {
 
 	for _, tt := range tests {
 
-		response := parser.ProcessCommand(tt.command)
+		response, _ := parser.ProcessCommand(tt.command)
 
 		if response != tt.expected {
 			t.Errorf("Command: %q, got: %q, want: %q", tt.command, response, tt.expected+"\n")
