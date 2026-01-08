@@ -33,8 +33,8 @@ func (s *MemoryStorage) Set(key, value string) {
 }
 
 func (s *MemoryStorage) Get(key string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	item, ok := s.data[key]
 	if !ok {
 		return "", false
