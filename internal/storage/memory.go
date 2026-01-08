@@ -54,7 +54,7 @@ func (s *MemoryStorage) Delete(key string) {
 	delete(s.data, key)
 }
 
-func (s *MemoryStorage) Expire(key string, seconds int64) bool {
+func (s *MemoryStorage) SetTTL(key string, seconds int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -72,7 +72,7 @@ func (s *MemoryStorage) Expire(key string, seconds int64) bool {
 	s.data[key] = item
 	return true
 }
-func (s *MemoryStorage) TTL(key string) int64 {
+func (s *MemoryStorage) GetTTL(key string) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -113,8 +113,17 @@ func (s *MemoryStorage) Increment(key string) (int64, error) {
 		return 0, fmt.Errorf("value is not an integer or out of range")
 	}
 
+	value++
+
 	item.Value = strconv.FormatInt(value, 10)
 	s.data[key] = item
 
-	return int64(value + 1), nil
+	return int64(value), nil
+}
+
+func (s *MemoryStorage) Flush() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.data = make(map[string]Item)
 }

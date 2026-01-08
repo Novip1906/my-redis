@@ -55,14 +55,14 @@ func TestMemoryStorage_TTL(t *testing.T) {
 
 	s.Set("key", "val")
 	s.Set("without", "ttl")
-	s.Expire("key", 1)
+	s.SetTTL("key", 1)
 
-	seconds := s.TTL("key")
+	seconds := s.GetTTL("key")
 	if seconds <= 0 {
 		t.Errorf("TTL() seconds = %v, want >0", seconds)
 	}
 
-	seconds = s.TTL("without")
+	seconds = s.GetTTL("without")
 	if seconds != -1 {
 		t.Errorf("TTL() seconds = %v, want -1", seconds)
 	}
@@ -74,7 +74,7 @@ func TestMemoryStorage_TTL(t *testing.T) {
 		t.Error("GET() ok = true, want false")
 	}
 
-	seconds = s.TTL("key")
+	seconds = s.GetTTL("key")
 	if seconds != -2 {
 		t.Errorf("TTL() seconds = %v, want -2", seconds)
 	}
@@ -83,16 +83,19 @@ func TestMemoryStorage_TTL(t *testing.T) {
 func TestMemoryStorage_Increment(t *testing.T) {
 	s := NewMemoryStorage()
 
-	s.Set("one", "1")
-	res, err := s.Increment("one")
-	if err != nil {
-		t.Error("Increment error", "error", err)
-	}
-	if res != 2 {
-		t.Errorf("res = %v, want 2", res)
+	s.Set("one", "0")
+
+	for i := 0; i < 3; i++ {
+		res, err := s.Increment("one")
+		if err != nil {
+			t.Error("Increment error", "error", err)
+		}
+		if res != int64(i+1) {
+			t.Errorf("res = %v, want %v", res, i+1)
+		}
 	}
 
-	res, err = s.Increment("zero")
+	res, err := s.Increment("zero")
 	if err != nil {
 		t.Error("Increment error", "error", err)
 	}
@@ -104,6 +107,19 @@ func TestMemoryStorage_Increment(t *testing.T) {
 	_, err = s.Increment("str")
 	if err == nil {
 		t.Error("err is null, expected parse error")
+	}
+}
+
+func TestMemoryStorage_Flush(t *testing.T) {
+	s := NewMemoryStorage()
+
+	s.Set("key", "value")
+
+	s.Flush()
+
+	_, ok := s.Get("key")
+	if ok {
+		t.Error("DB is not empty afret FLUSH command")
 	}
 }
 

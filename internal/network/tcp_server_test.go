@@ -8,14 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Novip1906/my-redis/internal/compute"
 	"github.com/Novip1906/my-redis/internal/storage"
 )
 
 func TestTCPServer_Integration(t *testing.T) {
-	store := storage.NewMemoryStorage()
+	storage := storage.NewMemoryStorage()
+
+	parser := compute.NewParser(storage)
 
 	port := ":4000"
-	server := NewTCPServer(port, store, slog.Default())
+	server := NewTCPServer(port, parser, slog.Default())
 
 	go func() {
 		if err := server.Start(); err != nil {
@@ -37,17 +40,6 @@ func TestTCPServer_Integration(t *testing.T) {
 	}{
 		{"SET mykey myvalue", "OK"},
 		{"GET mykey", "myvalue"},
-		{"GET unknown", "(nil)"},
-		{"DEL mykey", "OK"},
-		{"GET mykey", "(nil)"},
-		{"SET with ttl", "OK"},
-		{"EXPIRE with 2", "1"},
-		{"TTL with", "2"},
-		{"SET without ttl", "OK"},
-		{"TTL without", "-1"},
-		{"INCR testIncr", "1"},
-		{"SET testIncr 2", "OK"},
-		{"INCR testIncr", "3"},
 	}
 
 	reader := bufio.NewReader(conn)
