@@ -21,6 +21,8 @@ type TCPServer struct {
 	aof      *aof.AOF
 	log      *slog.Logger
 	listener net.Listener
+	conns    map[net.Conn]struct{}
+	mu       sync.Mutex
 }
 
 func NewTCPServer(port string, parser *compute.Parser, aof *aof.AOF, log *slog.Logger) *TCPServer {
@@ -29,6 +31,7 @@ func NewTCPServer(port string, parser *compute.Parser, aof *aof.AOF, log *slog.L
 		parser: parser,
 		aof:    aof,
 		log:    log,
+		conns:  make(map[net.Conn]struct{}),
 	}
 }
 
@@ -59,17 +62,33 @@ func (s *TCPServer) Start() error {
 
 func (s *TCPServer) Stop() {
 	s.listener.Close()
+
+	s.mu.Lock()
+	for conn := range s.conns {
+		conn.Close()
+	}
+	s.mu.Unlock()
+
 	s.wg.Wait()
 }
 
 func (s *TCPServer) handleConnection(conn net.Conn) {
-	defer s.wg.Done()
-	defer conn.Close()
-
 	remoteAddr := conn.RemoteAddr().String()
 
 	log := s.log.With("client", remoteAddr)
 	log.Info("New connection")
+
+	s.mu.Lock()
+	s.conns[conn] = struct{}{}
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.conns, conn)
+		s.mu.Unlock()
+		conn.Close()
+		s.wg.Done()
+	}()
 
 	scanner := bufio.NewScanner(conn)
 
