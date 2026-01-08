@@ -84,7 +84,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 
 		if strings.HasPrefix(strings.ToUpper(commandLine), "QUIT") {
 			conn.Write([]byte(response))
-			return
+			break
 		}
 
 		if saveToAOF {
