@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Novip1906/my-redis/internal/aof"
 	"github.com/Novip1906/my-redis/internal/compute"
 )
 
@@ -17,14 +18,16 @@ type TCPServer struct {
 	wg       sync.WaitGroup
 	port     string
 	parser   *compute.Parser
+	aof      *aof.AOF
 	log      *slog.Logger
 	listener net.Listener
 }
 
-func NewTCPServer(port string, parser *compute.Parser, log *slog.Logger) *TCPServer {
+func NewTCPServer(port string, parser *compute.Parser, aof *aof.AOF, log *slog.Logger) *TCPServer {
 	return &TCPServer{
 		port:   port,
 		parser: parser,
+		aof:    aof,
 		log:    log,
 	}
 }
@@ -75,13 +78,19 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 
 		commandLine := scanner.Text()
 
-		response := s.parser.ProcessCommand(commandLine + "\n")
+		response, saveToAOF := s.parser.ProcessCommand(commandLine)
 
 		response += "\n"
 
 		if strings.HasPrefix(strings.ToUpper(commandLine), "QUIT") {
 			conn.Write([]byte(response))
-			return
+			break
+		}
+
+		if saveToAOF {
+			if err := s.aof.Write(commandLine); err != nil {
+				s.log.Error("Failed to write to AOF", "error", err)
+			}
 		}
 
 		conn.Write([]byte(response))

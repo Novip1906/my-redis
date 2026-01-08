@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Address string `yaml:"address" env-default:":6379"`
+	AOFPath string `yaml:"aof-path" env-default:"database.aof"`
 }
 
 func LoadConfig() (*Config, error) {
