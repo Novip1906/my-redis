@@ -83,16 +83,19 @@ func TestMemoryStorage_TTL(t *testing.T) {
 func TestMemoryStorage_Increment(t *testing.T) {
 	s := NewMemoryStorage()
 
-	s.Set("one", "1")
-	res, err := s.Increment("one")
-	if err != nil {
-		t.Error("Increment error", "error", err)
-	}
-	if res != 2 {
-		t.Errorf("res = %v, want 2", res)
+	s.Set("one", "0")
+
+	for i := 0; i < 3; i++ {
+		res, err := s.Increment("one")
+		if err != nil {
+			t.Error("Increment error", "error", err)
+		}
+		if res != int64(i+1) {
+			t.Errorf("res = %v, want %v", res, i+1)
+		}
 	}
 
-	res, err = s.Increment("zero")
+	res, err := s.Increment("zero")
 	if err != nil {
 		t.Error("Increment error", "error", err)
 	}

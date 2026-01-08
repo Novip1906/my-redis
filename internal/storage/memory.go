@@ -113,10 +113,12 @@ func (s *MemoryStorage) Increment(key string) (int64, error) {
 		return 0, fmt.Errorf("value is not an integer or out of range")
 	}
 
+	value++
+
 	item.Value = strconv.FormatInt(value, 10)
 	s.data[key] = item
 
-	return int64(value + 1), nil
+	return int64(value), nil
 }
 
 func (s *MemoryStorage) Flush() {
