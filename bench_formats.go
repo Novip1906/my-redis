@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,10 +44,6 @@ func benchTextFormat(dir string, rounds int, data string) {
 	defer file.Close()
 
 	var mu sync.Mutex
-	dataWithNewline := data
-	if !strings.HasSuffix(dataWithNewline, "\n") {
-		dataWithNewline += "\n"
-	}
 
 	start := time.Now()
 	var wg sync.WaitGroup
@@ -54,6 +51,12 @@ func benchTextFormat(dir string, rounds int, data string) {
 	for i := 0; i < rounds; i++ {
 		go func() {
 			defer wg.Done()
+
+			dataWithNewline := data
+			if !strings.HasSuffix(dataWithNewline, "\n") {
+				dataWithNewline += "\n"
+			}
+
 			mu.Lock()
 			file.WriteString(dataWithNewline)
 			mu.Unlock()
@@ -77,9 +80,6 @@ func benchBinaryFormat(dir string, rounds int, data string) {
 
 	var mu sync.Mutex
 
-	dataBytes := []byte(data)
-	cmdLen := uint32(len(dataBytes))
-
 	start := time.Now()
 	var wg sync.WaitGroup
 	wg.Add(rounds)
@@ -87,6 +87,8 @@ func benchBinaryFormat(dir string, rounds int, data string) {
 		go func() {
 			defer wg.Done()
 
+			dataBytes := []byte(data)
+			cmdLen := uint32(len(dataBytes))
 			buf := make([]byte, 4+int(cmdLen))
 			binary.LittleEndian.PutUint32(buf[0:4], cmdLen)
 			copy(buf[4:], dataBytes)
@@ -114,14 +116,14 @@ func benchJSONFormat(dir string, rounds int, data string) {
 
 	var mu sync.Mutex
 
-	cmd := Command{Cmd: data}
-
 	start := time.Now()
 	var wg sync.WaitGroup
 	wg.Add(rounds)
 	for i := 0; i < rounds; i++ {
 		go func() {
 			defer wg.Done()
+
+			cmd := Command{Cmd: data}
 			jsonBytes, _ := json.Marshal(cmd)
 			jsonBytes = append(jsonBytes, '\n')
 
@@ -148,19 +150,19 @@ func benchRESPFormat(dir string, rounds int, data string) {
 
 	var mu sync.Mutex
 
-	parts := strings.Split(data, " ")
-	respData := "*" + fmt.Sprint(len(parts)) + "\r\n"
-	for _, p := range parts {
-		respData += "$" + fmt.Sprint(len(p)) + "\r\n" + p + "\r\n"
-	}
-	respBytes := []byte(respData)
-
 	start := time.Now()
 	var wg sync.WaitGroup
 	wg.Add(rounds)
 	for i := 0; i < rounds; i++ {
 		go func() {
 			defer wg.Done()
+
+			parts := strings.Split(data, " ")
+			respData := "*" + strconv.Itoa(len(parts)) + "\r\n"
+			for _, p := range parts {
+				respData += "$" + strconv.Itoa(len(p)) + "\r\n" + p + "\r\n"
+			}
+			respBytes := []byte(respData)
 
 			mu.Lock()
 			file.Write(respBytes)
@@ -173,3 +175,4 @@ func benchRESPFormat(dir string, rounds int, data string) {
 	fileInfo, _ := file.Stat()
 	fmt.Printf("[RESP Format]   Time: %v \tSize: %d bytes\n", elapsed, fileInfo.Size())
 }
+
