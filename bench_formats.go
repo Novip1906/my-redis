@@ -34,10 +34,13 @@ func main() {
 	}
 
 	rounds := 1_000_000
+	largeValue := strings.Repeat("This is a large value to test how different formats handle bigger payloads. ", 20)
 	testData := []string{
 		"SET key:1 value:100",
 		"SET ключ:1 значение:100",
 		"SET long_key:123 \"Very long string with spaces and many words to test length prefixing\"",
+		"SET big_key:1 \"" + largeValue + "\"",
+		"SET huge_key:2 \"" + strings.Repeat("DATA_", 100) + "\"",
 		"GET key:1",
 		"DEL ключ:1",
 	}
