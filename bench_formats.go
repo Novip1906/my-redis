@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -16,38 +16,52 @@ type Command struct {
 	Cmd string `json:"cmd"`
 }
 
-func main() {
-	dir := os.TempDir()
-	dir = "/tmp/myredis-bench"
-	os.MkdirAll(dir, 0777)
+type SerializeFunc func(data string) ([]byte, error)
 
-	rounds := 1000000
+func main() {
+	dir := "/tmp/myredis-bench"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create directory %s: %v\n", dir, err)
+		os.Exit(1)
+	}
+
+	rounds := 1_000_000
 	dataCmd := "SET my_test_key value"
 
-	fmt.Printf("Starting benchmark: %d concurrent writes per format\n\n", rounds)
+	fmt.Printf("Starting benchmark: %d writes per format\n\n", rounds)
 
-	benchTextFormat(dir, rounds, dataCmd)
-	benchBinaryFormat(dir, rounds, dataCmd)
-	benchJSONFormat(dir, rounds, dataCmd)
-	benchRESPFormat(dir, rounds, dataCmd)
+	benchmarks := []struct {
+		name     string
+		filename string
+		fn       SerializeFunc
+	}{
+		{"Text", "test_format_text.txt", serializeText},
+		{"Binary", "test_format_binary.bin", serializeBinary},
+		{"JSON", "test_format_json.json", serializeJSON},
+		{"RESP", "test_format_resp.resp", serializeRESP},
+	}
+
+	for _, b := range benchmarks {
+		if err := runBench(b.name, filepath.Join(dir, b.filename), rounds, dataCmd, b.fn); err != nil {
+			fmt.Fprintf(os.Stderr, "[%s] benchmark failed: %v\n", b.name, err)
+		}
+	}
 
 	fmt.Println("Done")
 }
 
-func benchTextFormat(dir string, rounds int, data string) {
-	path := filepath.Join(dir, "test_format_text.txt")
+func runBench(name, path string, rounds int, data string, serialize SerializeFunc) error {
 	os.Remove(path)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("open file: %w", err)
 	}
 	defer file.Close()
 
 	var mu sync.Mutex
 
 	start := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(rounds)
 	for i := 0; i < rounds; i++ {
 		go func() {
 			defer wg.Done()
@@ -62,19 +76,15 @@ func benchTextFormat(dir string, rounds int, data string) {
 			mu.Unlock()
 		}()
 	}
-	wg.Wait()
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync: %w", err)
+	}
+
 	elapsed := time.Since(start)
 
-	fileInfo, _ := file.Stat()
-	fmt.Printf("[Text Format]   Time: %v \tSize: %d bytes\n", elapsed, fileInfo.Size())
-}
-
-func benchBinaryFormat(dir string, rounds int, data string) {
-	path := filepath.Join(dir, "test_format_binary.bin")
-	os.Remove(path)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	fileInfo, err := file.Stat()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("stat: %w", err)
 	}
 	defer file.Close()
 
@@ -144,9 +154,11 @@ func benchRESPFormat(dir string, rounds int, data string) {
 	os.Remove(path)
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("json marshal: %w", err)
 	}
-	defer file.Close()
+	jsonBytes = append(jsonBytes, '\n')
+	return jsonBytes, nil
+}
 
 	var mu sync.Mutex
 
