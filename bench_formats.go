@@ -83,7 +83,7 @@ func runBench(name, path string, rounds int, data string, serialize SerializeFun
 		return fmt.Errorf("stat: %w", err)
 	}
 
-	fmt.Printf("[%s Format]   Time: %v \tSize: %d bytes\n", name, elapsed, fileInfo.Size())
+	fmt.Printf("[%-6s Format]   Time: %-14v Size: %d bytes\n", name, elapsed, fileInfo.Size())
 	return nil
 }
 
