@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -19,7 +18,7 @@ type Command struct {
 type SerializeFunc func(data string) ([]byte, error)
 
 func main() {
-	dir := "/tmp/myredis-bench"
+	dir := filepath.Join(os.TempDir(), "myredis-bench")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create directory %s: %v\n", dir, err)
 		os.Exit(1)
@@ -51,7 +50,9 @@ func main() {
 }
 
 func runBench(name, path string, rounds int, data string, serialize SerializeFunc) error {
-	os.Remove(path)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove old file: %w", err)
+	}
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -59,23 +60,18 @@ func runBench(name, path string, rounds int, data string, serialize SerializeFun
 	}
 	defer file.Close()
 
-	var mu sync.Mutex
-
 	start := time.Now()
 	for i := 0; i < rounds; i++ {
-		go func() {
-			defer wg.Done()
+		payload, err := serialize(data)
+		if err != nil {
+			return fmt.Errorf("serialize at round %d: %w", i, err)
+		}
 
-			dataWithNewline := data
-			if !strings.HasSuffix(dataWithNewline, "\n") {
-				dataWithNewline += "\n"
-			}
-
-			mu.Lock()
-			file.WriteString(dataWithNewline)
-			mu.Unlock()
-		}()
+		if _, err := file.Write(payload); err != nil {
+			return fmt.Errorf("write at round %d: %w", i, err)
+		}
 	}
+
 	if err := file.Sync(); err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
@@ -86,105 +82,45 @@ func runBench(name, path string, rounds int, data string, serialize SerializeFun
 	if err != nil {
 		return fmt.Errorf("stat: %w", err)
 	}
-	defer file.Close()
 
-	var mu sync.Mutex
-
-	start := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(rounds)
-	for i := 0; i < rounds; i++ {
-		go func() {
-			defer wg.Done()
-
-			dataBytes := []byte(data)
-			cmdLen := uint32(len(dataBytes))
-			buf := make([]byte, 4+int(cmdLen))
-			binary.LittleEndian.PutUint32(buf[0:4], cmdLen)
-			copy(buf[4:], dataBytes)
-
-			mu.Lock()
-			file.Write(buf)
-			mu.Unlock()
-		}()
-	}
-	wg.Wait()
-	elapsed := time.Since(start)
-
-	fileInfo, _ := file.Stat()
-	fmt.Printf("[Binary Format] Time: %v \tSize: %d bytes\n", elapsed, fileInfo.Size())
+	fmt.Printf("[%s Format]   Time: %v \tSize: %d bytes\n", name, elapsed, fileInfo.Size())
+	return nil
 }
 
-func benchJSONFormat(dir string, rounds int, data string) {
-	path := filepath.Join(dir, "test_format_json.json")
-	os.Remove(path)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+func serializeText(data string) ([]byte, error) {
+	return append([]byte(data), '\n'), nil
+}
+
+func serializeBinary(data string) ([]byte, error) {
+	dataBytes := []byte(data)
+	cmdLen := uint32(len(dataBytes))
+	buf := make([]byte, 4+int(cmdLen))
+	binary.LittleEndian.PutUint32(buf[0:4], cmdLen)
+	copy(buf[4:], dataBytes)
+	return buf, nil
+}
+
+func serializeJSON(data string) ([]byte, error) {
+	cmd := Command{Cmd: data}
+	jsonBytes, err := json.Marshal(cmd)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	defer file.Close()
-
-	var mu sync.Mutex
-
-	start := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(rounds)
-	for i := 0; i < rounds; i++ {
-		go func() {
-			defer wg.Done()
-
-			cmd := Command{Cmd: data}
-			jsonBytes, _ := json.Marshal(cmd)
-			jsonBytes = append(jsonBytes, '\n')
-
-			mu.Lock()
-			file.Write(jsonBytes)
-			mu.Unlock()
-		}()
-	}
-	wg.Wait()
-	elapsed := time.Since(start)
-
-	fileInfo, _ := file.Stat()
-	fmt.Printf("[JSON Format]   Time: %v \tSize: %d bytes\n", elapsed, fileInfo.Size())
+	return append(jsonBytes, '\n'), nil
 }
 
-func benchRESPFormat(dir string, rounds int, data string) {
-	path := filepath.Join(dir, "test_format_resp.resp")
-	os.Remove(path)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, fmt.Errorf("json marshal: %w", err)
+func serializeRESP(data string) ([]byte, error) {
+	parts := strings.Split(data, " ")
+	var b strings.Builder
+	b.WriteString("*")
+	b.WriteString(strconv.Itoa(len(parts)))
+	b.WriteString("\r\n")
+	for _, p := range parts {
+		b.WriteString("$")
+		b.WriteString(strconv.Itoa(len(p)))
+		b.WriteString("\r\n")
+		b.WriteString(p)
+		b.WriteString("\r\n")
 	}
-	jsonBytes = append(jsonBytes, '\n')
-	return jsonBytes, nil
+	return []byte(b.String()), nil
 }
-
-	var mu sync.Mutex
-
-	start := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(rounds)
-	for i := 0; i < rounds; i++ {
-		go func() {
-			defer wg.Done()
-
-			parts := strings.Split(data, " ")
-			respData := "*" + strconv.Itoa(len(parts)) + "\r\n"
-			for _, p := range parts {
-				respData += "$" + strconv.Itoa(len(p)) + "\r\n" + p + "\r\n"
-			}
-			respBytes := []byte(respData)
-
-			mu.Lock()
-			file.Write(respBytes)
-			mu.Unlock()
-		}()
-	}
-	wg.Wait()
-	elapsed := time.Since(start)
-
-	fileInfo, _ := file.Stat()
-	fmt.Printf("[RESP Format]   Time: %v \tSize: %d bytes\n", elapsed, fileInfo.Size())
-}
-
