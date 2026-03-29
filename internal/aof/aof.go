@@ -5,11 +5,15 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type AOF struct {
-	file *os.File
-	mu   sync.Mutex
+	file   *os.File
+	writer *bufio.Writer
+	mu     sync.Mutex
+	quit   chan struct{}
+	closed bool
 }
 
 func NewAOF(path string) (*AOF, error) {
@@ -18,14 +22,29 @@ func NewAOF(path string) (*AOF, error) {
 		return nil, err
 	}
 
-	return &AOF{
-		file: file,
-	}, nil
+	a := &AOF{
+		file:   file,
+		writer: bufio.NewWriter(file),
+		quit:   make(chan struct{}),
+	}
+
+	go a.syncLoop()
+
+	return a, nil
 }
 
 func (a *AOF) Close() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	if a.closed {
+		return nil
+	}
+	a.closed = true
+	close(a.quit)
+
+	a.writer.Flush()
+	a.file.Sync()
 	return a.file.Close()
 }
 
@@ -33,16 +52,35 @@ func (a *AOF) Write(command string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if a.closed {
+		return os.ErrClosed
+	}
+
 	if !strings.HasSuffix(command, "\n") {
 		command += "\n"
 	}
 
-	_, err := a.file.WriteString(command)
-	if err != nil {
-		return err
-	}
+	_, err := a.writer.WriteString(command)
+	return err
+}
 
-	return nil
+func (a *AOF) syncLoop() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			a.mu.Lock()
+			if !a.closed {
+				a.writer.Flush()
+				a.file.Sync()
+			}
+			a.mu.Unlock()
+		case <-a.quit:
+			return
+		}
+	}
 }
 
 func ReadAll(path string, callback func(line string)) error {
