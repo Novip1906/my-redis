@@ -87,15 +87,21 @@ func runWriteBench(name, path string, rounds int, data []string, serialize Seria
 	}
 	defer file.Close()
 
+	bw := bufio.NewWriter(file)
+
 	start := time.Now()
 	for i := 0; i < rounds; i++ {
 		payload, err := serialize(data[i%len(data)])
 		if err != nil {
 			return fmt.Errorf("serialize at round %d: %w", i, err)
 		}
-		if _, err := file.Write(payload); err != nil {
+		if _, err := bw.Write(payload); err != nil {
 			return fmt.Errorf("write at round %d: %w", i, err)
 		}
+	}
+
+	if err := bw.Flush(); err != nil {
+		return fmt.Errorf("flush: %w", err)
 	}
 
 	if err := file.Sync(); err != nil {
