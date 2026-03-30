@@ -13,16 +13,11 @@ import (
 	"time"
 )
 
-var (
-	binaryBuf = make([]byte, 1024)
-	respBuf   = make([]byte, 4096)
-)
-
 type Command struct {
 	Cmd string `json:"cmd"`
 }
 
-type SerializeFunc func(data string) ([]byte, error)
+type SerializeFunc func(w io.Writer, data string) error
 
 type DeserializeFunc func(br *bufio.Reader) (string, error)
 
@@ -91,12 +86,8 @@ func runWriteBench(name, path string, rounds int, data []string, serialize Seria
 
 	start := time.Now()
 	for i := 0; i < rounds; i++ {
-		payload, err := serialize(data[i%len(data)])
-		if err != nil {
+		if err := serialize(bw, data[i%len(data)]); err != nil {
 			return fmt.Errorf("serialize at round %d: %w", i, err)
-		}
-		if _, err := bw.Write(payload); err != nil {
-			return fmt.Errorf("write at round %d: %w", i, err)
 		}
 	}
 
@@ -145,52 +136,67 @@ func runReadBench(name, path string, deserialize DeserializeFunc) error {
 	return nil
 }
 
-func serializeText(data string) ([]byte, error) {
-	return append([]byte(data), '\n'), nil
-}
-
-func serializeBinary(data string) ([]byte, error) {
-	cmdLen := uint32(len(data))
-	totalLen := 4 + int(cmdLen)
-
-	var buf []byte
-	if totalLen <= len(binaryBuf) {
-		buf = binaryBuf[:totalLen]
-	} else {
-		buf = make([]byte, totalLen)
+func serializeText(w io.Writer, data string) error {
+	if _, err := io.WriteString(w, data); err != nil {
+		return err
 	}
-
-	binary.LittleEndian.PutUint32(buf[0:4], cmdLen)
-	copy(buf[4:], data)
-	return buf, nil
+	_, err := w.Write([]byte{'\n'})
+	return err
 }
 
-func serializeJSON(data string) ([]byte, error) {
+func serializeBinary(w io.Writer, data string) error {
+	cmdLen := uint32(len(data))
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], cmdLen)
+	if _, err := w.Write(lenBuf[:]); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, data)
+	return err
+}
+
+func serializeJSON(w io.Writer, data string) error {
 	cmd := Command{Cmd: data}
 	jsonBytes, err := json.Marshal(cmd)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return append(jsonBytes, '\n'), nil
+	if _, err := w.Write(jsonBytes); err != nil {
+		return err
+	}
+	_, err = w.Write([]byte{'\n'})
+	return err
 }
 
-func serializeRESP(data string) ([]byte, error) {
+func serializeRESP(w io.Writer, data string) error {
 	parts := parseCommand(data)
-	var b strings.Builder
-
-	b.Grow(len(data) + (len(parts) * 10))
-
-	b.WriteString("*")
-	b.WriteString(strconv.Itoa(len(parts)))
-	b.WriteString("\r\n")
-	for _, p := range parts {
-		b.WriteString("$")
-		b.WriteString(strconv.Itoa(len(p)))
-		b.WriteString("\r\n")
-		b.WriteString(p)
-		b.WriteString("\r\n")
+	if _, err := io.WriteString(w, "*"); err != nil {
+		return err
 	}
-	return []byte(b.String()), nil
+	if _, err := io.WriteString(w, strconv.Itoa(len(parts))); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "\r\n"); err != nil {
+		return err
+	}
+	for _, p := range parts {
+		if _, err := io.WriteString(w, "$"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, strconv.Itoa(len(p))); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, "\r\n"); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, p); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, "\r\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parseCommand(data string) []string {
@@ -233,12 +239,7 @@ func deserializeBinary(br *bufio.Reader) (string, error) {
 	}
 	size := binary.LittleEndian.Uint32(lenBuf[:])
 
-	var data []byte
-	if int(size) <= len(binaryBuf) {
-		data = binaryBuf[:size]
-	} else {
-		data = make([]byte, size)
-	}
+	data := make([]byte, size)
 
 	if _, err := io.ReadFull(br, data); err != nil {
 		return "", err
@@ -288,12 +289,7 @@ func deserializeRESP(br *bufio.Reader) (string, error) {
 			return "", fmt.Errorf("parse bulk length: %w", err)
 		}
 
-		var buf []byte
-		if size <= len(respBuf) {
-			buf = respBuf[:size]
-		} else {
-			buf = make([]byte, size)
-		}
+		buf := make([]byte, size)
 
 		if _, err := io.ReadFull(br, buf); err != nil {
 			return "", err
