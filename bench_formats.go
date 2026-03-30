@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -43,19 +44,25 @@ func main() {
 	benchmarks := []struct {
 		name        string
 		filename    string
+		wrapWriter  func(io.Writer) io.WriteCloser
+		wrapReader  func(io.Reader) (io.ReadCloser, error)
 		serialize   SerializeFunc
 		deserialize DeserializeFunc
 	}{
-		{"Text", "test_format_text.txt", serializeText, deserializeText},
-		{"Binary", "test_format_binary.bin", serializeBinary, deserializeBinary},
-		{"JSON", "test_format_json.json", serializeJSON, deserializeJSON},
-		{"RESP", "test_format_resp.resp", serializeRESP, deserializeRESP},
+		{"Text", "test_format_text.txt", nil, nil, serializeText, deserializeText},
+		{"Binary", "test_format_binary.bin", nil, nil, serializeBinary, deserializeBinary},
+		{"JSON", "test_format_json.json", nil, nil, serializeJSON, deserializeJSON},
+		{"RESP", "test_format_resp.resp", nil, nil, serializeRESP, deserializeRESP},
+		{"Gzip Binary", "test_format_gzip.bin",
+			func(w io.Writer) io.WriteCloser { return gzip.NewWriter(w) },
+			func(r io.Reader) (io.ReadCloser, error) { return gzip.NewReader(r) },
+			serializeBinary, deserializeBinary},
 	}
 
 	fmt.Printf("=== WRITE: %d records per format ===\n\n", rounds)
 	for _, b := range benchmarks {
 		path := filepath.Join(dir, b.filename)
-		if err := runWriteBench(b.name, path, rounds, testData, b.serialize); err != nil {
+		if err := runWriteBench(b.name, path, rounds, testData, b.wrapWriter, b.serialize); err != nil {
 			fmt.Fprintf(os.Stderr, "[%s] write benchmark failed: %v\n", b.name, err)
 		}
 	}
@@ -63,7 +70,7 @@ func main() {
 	fmt.Printf("\n=== READ (AOF restore): %d records per format ===\n\n", rounds)
 	for _, b := range benchmarks {
 		path := filepath.Join(dir, b.filename)
-		if err := runReadBench(b.name, path, b.deserialize); err != nil {
+		if err := runReadBench(b.name, path, b.wrapReader, b.deserialize); err != nil {
 			fmt.Fprintf(os.Stderr, "[%s] read benchmark failed: %v\n", b.name, err)
 		}
 	}
@@ -71,7 +78,7 @@ func main() {
 	fmt.Println("\nDone")
 }
 
-func runWriteBench(name, path string, rounds int, data []string, serialize SerializeFunc) error {
+func runWriteBench(name, path string, rounds int, data []string, wrapWriter func(io.Writer) io.WriteCloser, serialize SerializeFunc) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove old file: %w", err)
 	}
@@ -83,11 +90,24 @@ func runWriteBench(name, path string, rounds int, data []string, serialize Seria
 	defer file.Close()
 
 	bw := bufio.NewWriter(file)
+	var w io.Writer = bw
+	var wc io.Closer
+	if wrapWriter != nil {
+		wr := wrapWriter(bw)
+		w = wr
+		wc = wr
+	}
 
 	start := time.Now()
 	for i := 0; i < rounds; i++ {
-		if err := serialize(bw, data[i%len(data)]); err != nil {
+		if err := serialize(w, data[i%len(data)]); err != nil {
 			return fmt.Errorf("serialize at round %d: %w", i, err)
+		}
+	}
+
+	if wc != nil {
+		if err := wc.Close(); err != nil {
+			return fmt.Errorf("close wrapper: %w", err)
 		}
 	}
 
@@ -106,11 +126,11 @@ func runWriteBench(name, path string, rounds int, data []string, serialize Seria
 		return fmt.Errorf("stat: %w", err)
 	}
 
-	fmt.Printf("[%-6s Format]   Time: %-14v Size: %d bytes\n", name, elapsed, fileInfo.Size())
+	fmt.Printf("[%-11s Format] Time: %-14v Size: %d bytes\n", name, elapsed, fileInfo.Size())
 	return nil
 }
 
-func runReadBench(name, path string, deserialize DeserializeFunc) error {
+func runReadBench(name, path string, wrapReader func(io.Reader) (io.ReadCloser, error), deserialize DeserializeFunc) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open file: %w", err)
@@ -118,10 +138,22 @@ func runReadBench(name, path string, deserialize DeserializeFunc) error {
 	defer file.Close()
 
 	br := bufio.NewReader(file)
+	var r io.Reader = br
+	var rc io.Closer
+	if wrapReader != nil {
+		wr, err := wrapReader(br)
+		if err != nil {
+			return fmt.Errorf("wrap reader: %w", err)
+		}
+		r = wr
+		rc = wr
+	}
+	brTarget := bufio.NewReader(r)
+
 	count := 0
 	start := time.Now()
 	for {
-		_, err := deserialize(br)
+		_, err := deserialize(brTarget)
 		if err == io.EOF {
 			break
 		}
@@ -132,7 +164,11 @@ func runReadBench(name, path string, deserialize DeserializeFunc) error {
 	}
 	elapsed := time.Since(start)
 
-	fmt.Printf("[%-6s Format]   Time: %-14v Records: %d\n", name, elapsed, count)
+	if rc != nil {
+		rc.Close()
+	}
+
+	fmt.Printf("[%-11s Format] Time: %-14v Records: %d\n", name, elapsed, count)
 	return nil
 }
 
